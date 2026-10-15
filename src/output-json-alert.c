@@ -71,21 +71,23 @@
 
 #define MODULE_NAME "JsonAlertLog"
 
-#define LOG_JSON_PAYLOAD           BIT_U16(0)
-#define LOG_JSON_PACKET            BIT_U16(1)
-#define LOG_JSON_PAYLOAD_BASE64    BIT_U16(2)
-#define LOG_JSON_TAGGED_PACKETS    BIT_U16(3)
-#define LOG_JSON_APP_LAYER         BIT_U16(4)
-#define LOG_JSON_FLOW              BIT_U16(5)
-#define LOG_JSON_HTTP_BODY         BIT_U16(6)
-#define LOG_JSON_HTTP_BODY_BASE64  BIT_U16(7)
-#define LOG_JSON_RULE_METADATA     BIT_U16(8)
-#define LOG_JSON_RULE              BIT_U16(9)
-#define LOG_JSON_VERDICT           BIT_U16(10)
-#define LOG_JSON_WEBSOCKET_PAYLOAD        BIT_U16(11)
-#define LOG_JSON_WEBSOCKET_PAYLOAD_BASE64 BIT_U16(12)
-#define LOG_JSON_PAYLOAD_LENGTH           BIT_U16(13)
-#define LOG_JSON_REFERENCE                BIT_U16(14)
+#define LOG_JSON_PAYLOAD           BIT_U64(0)
+#define LOG_JSON_PACKET            BIT_U64(1)
+#define LOG_JSON_PAYLOAD_BASE64    BIT_U64(2)
+#define LOG_JSON_TAGGED_PACKETS    BIT_U64(3)
+#define LOG_JSON_APP_LAYER         BIT_U64(4)
+#define LOG_JSON_FLOW              BIT_U64(5)
+#define LOG_JSON_HTTP_BODY         BIT_U64(6)
+#define LOG_JSON_HTTP_BODY_BASE64  BIT_U64(7)
+#define LOG_JSON_RULE_METADATA     BIT_U64(8)
+#define LOG_JSON_RULE              BIT_U64(9)
+#define LOG_JSON_VERDICT           BIT_U64(10)
+#define LOG_JSON_WEBSOCKET_PAYLOAD        BIT_U64(11)
+#define LOG_JSON_WEBSOCKET_PAYLOAD_BASE64 BIT_U64(12)
+#define LOG_JSON_PAYLOAD_LENGTH           BIT_U64(13)
+#define LOG_JSON_REFERENCE                BIT_U64(14)
+#define LOG_JSON_HTTP_HEADER              BIT_U64(15)
+#define LOG_JSON_HTTP_HEADER_BASE64       BIT_U64(16)
 
 #define METADATA_DEFAULTS ( LOG_JSON_FLOW |                        \
             LOG_JSON_APP_LAYER  |                                  \
@@ -99,7 +101,7 @@
 
 typedef struct AlertJsonOutputCtx_ {
     LogFileCtx* file_ctx;
-    uint16_t flags;
+    uint64_t flags;
     uint32_t payload_buffer_size;
     HttpXFFCfg *xff_cfg;
     HttpXFFCfg *parent_xff_cfg;
@@ -330,7 +332,7 @@ static void AlertAddPayload(AlertJsonOutputCtx *json_output_ctx, SCJsonBuilder *
 }
 
 static void AlertAddAppLayer(
-        const Packet *p, SCJsonBuilder *jb, const uint64_t tx_id, const uint16_t option_flags)
+        const Packet *p, SCJsonBuilder *jb, const uint64_t tx_id, const uint64_t option_flags)
 {
     const AppProto proto = FlowGetAppProtocol(p->flow);
     EveJsonSimpleAppLayerLogger *al = SCEveJsonSimpleGetLogger(proto);
@@ -389,6 +391,12 @@ static void AlertAddAppLayer(
             // TODO: Could result in an empty http object being logged.
             SCJbOpenObject(jb, "http");
             if (EveHttpAddMetadata(p->flow, tx_id, jb)) {
+                if (option_flags & LOG_JSON_HTTP_HEADER) {
+                    EveHttpLogJSONHeaderPrintable(jb, p->flow, tx_id);
+                }
+                if (option_flags & LOG_JSON_HTTP_HEADER_BASE64) {
+                    EveHttpLogJSONHeaderBase64(jb, p->flow, tx_id);
+                }
                 if (option_flags & LOG_JSON_HTTP_BODY) {
                     EveHttpLogJSONBodyPrintable(jb, p->flow, tx_id);
                 }
@@ -999,7 +1007,7 @@ static void JsonAlertLogDeInitCtxSub(OutputCtx *output_ctx)
     SCFree(output_ctx);
 }
 
-static void SetFlag(const SCConfNode *conf, const char *name, uint16_t flag, uint16_t *out_flags)
+static void SetFlag(const SCConfNode *conf, const char *name, uint64_t flag, uint64_t *out_flags)
 {
     DEBUG_VALIDATE_BUG_ON(conf == NULL);
     const char *setting = SCConfNodeLookupChildValue(conf, name);
@@ -1016,7 +1024,7 @@ static void JsonAlertLogSetupMetadata(AlertJsonOutputCtx *json_output_ctx, SCCon
 {
     static bool warn_no_meta = false;
     uint32_t payload_buffer_size = JSON_STREAM_BUFFER_SIZE;
-    uint16_t flags = METADATA_DEFAULTS;
+    uint64_t flags = METADATA_DEFAULTS;
 
     if (conf != NULL) {
         /* Check for metadata to enable/disable. */
@@ -1042,6 +1050,8 @@ static void JsonAlertLogSetupMetadata(AlertJsonOutputCtx *json_output_ctx, SCCon
         SetFlag(conf, "packet", LOG_JSON_PACKET, &flags);
         SetFlag(conf, "tagged-packets", LOG_JSON_TAGGED_PACKETS, &flags);
         SetFlag(conf, "payload-printable", LOG_JSON_PAYLOAD, &flags);
+        SetFlag(conf, "http-header-printable", LOG_JSON_HTTP_HEADER, &flags);
+        SetFlag(conf, "http-header", LOG_JSON_HTTP_HEADER_BASE64, &flags);
         SetFlag(conf, "http-body-printable", LOG_JSON_HTTP_BODY, &flags);
         SetFlag(conf, "http-body", LOG_JSON_HTTP_BODY_BASE64, &flags);
         SetFlag(conf, "websocket-payload-printable", LOG_JSON_WEBSOCKET_PAYLOAD, &flags);
