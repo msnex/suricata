@@ -423,6 +423,58 @@ void EveHttpLogJSONBodyBase64(SCJsonBuilder *js, Flow *f, uint64_t tx_id)
     }
 }
 
+void EveHttpLogJSONHeaderBase64(SCJsonBuilder *js, Flow *f, uint64_t tx_id)
+{
+    HtpState *htp_state = (HtpState *)FlowGetAppState(f);
+    if (unlikely(htp_state == NULL)) {
+        return;
+    }
+    htp_tx_t *tx = AppLayerParserGetTx(IPPROTO_TCP, ALPROTO_HTTP1, htp_state, tx_id);
+    if (unlikely(tx == NULL)) {
+        return;
+    }
+
+    HtpTxUserData *htud = (HtpTxUserData *)htp_tx_get_user_data(tx);
+    if (htud == NULL) {
+        return;
+    }
+
+    if (htud->request_headers_raw != NULL && htud->request_headers_raw_len > 0) {
+        SCJbSetBase64(js, "http_request_header", htud->request_headers_raw,
+                htud->request_headers_raw_len);
+    }
+    if (htud->response_headers_raw != NULL && htud->response_headers_raw_len > 0) {
+        SCJbSetBase64(js, "http_response_header", htud->response_headers_raw,
+                htud->response_headers_raw_len);
+    }
+}
+
+void EveHttpLogJSONHeaderPrintable(SCJsonBuilder *js, Flow *f, uint64_t tx_id)
+{
+    HtpState *htp_state = (HtpState *)FlowGetAppState(f);
+    if (unlikely(htp_state == NULL)) {
+        return;
+    }
+    htp_tx_t *tx = AppLayerParserGetTx(IPPROTO_TCP, ALPROTO_HTTP1, htp_state, tx_id);
+    if (unlikely(tx == NULL)) {
+        return;
+    }
+
+    HtpTxUserData *htud = (HtpTxUserData *)htp_tx_get_user_data(tx);
+    if (htud == NULL) {
+        return;
+    }
+
+    if (htud->request_headers_raw != NULL && htud->request_headers_raw_len > 0) {
+        SCJbSetPrintAsciiString(js, "http_request_header_printable", htud->request_headers_raw,
+                htud->request_headers_raw_len);
+    }
+    if (htud->response_headers_raw != NULL && htud->response_headers_raw_len > 0) {
+        SCJbSetPrintAsciiString(js, "http_response_header_printable", htud->response_headers_raw,
+                htud->response_headers_raw_len);
+    }
+}
+
 /* JSON format logging */
 static void EveHttpLogJSON(JsonHttpLogThread *aft, SCJsonBuilder *js, htp_tx_t *tx, uint64_t tx_id)
 {
